@@ -1,25 +1,33 @@
 # Coding: UTF-8
 $SourcePath = File.expand_path('../', __FILE__)
 require $SourcePath + "/osu_api.rb"
+require $SourcePath + "/osu_web.rb"
 require 'json'
 require 'fileutils'
 require "date"
 require 'thread'
+require 'sqlite3'
 
 
 ###設定
 api_key = ""
-$cookie = "cookie:"
+$user_name = ""
+$password = ""
+$mode = "3"
 $thread_number = 3 #多すぎると回線速度的に逆に遅くなる
 $since = "2013-02-14"
-$param = "&m=3&a=1" #since以外のパラメータを指定
+$param = "&m=#{$mode}&a=1" #since以外のパラメータを指定
 $approved = [1]
+$starts = 3　#指定以上の難易度
+$diff_dize = 4 #キーの数
 ###ここまで
 
 
 class Osu_downloader
   def initialize(osu_api_key)
     @osu_api = Osu_Application.new(osu_api_key)
+    @osu_web = Osu_web.new($user_name, $password, osu_api_key, $mode)
+    $cookie = "cookie:#{@osu_web.get_cookie}"
     @beatmaps = Queue.new
     @thread_list = Array.new($thread_number)
     @sum = 0
@@ -31,7 +39,7 @@ class Osu_downloader
     @exist = []
     if File.exist?("#{$SourcePath}/exist")
       tmp = File.open("#{$SourcePath}/exist").read
-      @exist = tmp.split("\n")
+      @exist = tmp.split("\r\n")
       @exist_c = "あり"
     end
   end
@@ -48,9 +56,8 @@ class Osu_downloader
   end
   
   def download(map_id)
-    #`wget -O 'osz/#{map_id}.osz' --header '$cookie' https://osu.ppy.sh/d/#{map_id}`
+    `wget -O '#{$SourcePath}/osz/#{map_id}.osz' --header '#{$cookie}' https://osu.ppy.sh/d/#{map_id}`
     @sum += 1
-    sleep(5)
     print "#{@beatmaps.size}..."
   end
   
@@ -63,15 +70,17 @@ class Osu_downloader
       return if a_result == result
       return unless result
       for i in 0..499 do
+        puts i
         begin
           unless beatmapset_id == result[1][i]['beatmapset_id']
             beatmapset_id = result[1][i]['beatmapset_id']
             time = DateTime.parse(result[1][i]['last_update'])
             since = time.strftime("%Y-%m-%d")
+            file = File.open("#{@SourcePath}/completion.txt", "w")
+            file.write(since)
+            file.close
             unless @exist.include?(beatmapset_id)
-              #if result[1][i]['approved'] == "1"
-              if $approved.include?(result[1][i]['approved'].to_i)
-                #Thread.new{download(beatmapset_id)}
+              if $approved.include?(result[1][i]['approved'].to_i) && $starts < result[1][i]['difficultyrating'].to_i && $diff_dize == result[1][i]['diff_size'].to_i
                 @beatmaps.push(beatmapset_id)
                 @b_sum += 1
               end
@@ -105,6 +114,7 @@ class Osu_downloader
     puts "#{@path}に保存しました。"
   end
 end
-
 osu_downloader = Osu_downloader.new(api_key)
 osu_downloader.main
+
+
